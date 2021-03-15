@@ -305,7 +305,7 @@ ble_ll_scan_refresh_nrpa(struct ble_ll_scan_sm *scansm)
     ble_npl_time_t now;
 
     now = ble_npl_time_get();
-    if ((ble_npl_stime_t)(now - scansm->scan_nrpa_timer) >= 0) {
+    if (CPUTIME_GEQ(now, scansm->scan_nrpa_timer)) {
         /* Generate new NRPA */
         ble_ll_rand_data_get(scansm->scan_nrpa, BLE_DEV_ADDR_LEN);
         scansm->scan_nrpa[5] &= ~0xc0;
@@ -2687,10 +2687,16 @@ ble_ll_hci_send_ext_adv_report(uint8_t ptype, uint8_t *adva, uint8_t adva_type,
 
         /*
          * We need another event if either there are still some data left to
-         * send in current PDU or scan is not completed. The only exception is
-         * when this is a scannable event which is not a scan response.
+         * send in current PDU or scan is not completed. There are two exceptions
+         * though:
+         * - we sent all data from this PDU and there is scan error set already;
+         *   it may be set before entering current function due to failed aux
+         *   scan scheduling
+         * - this is a scannable event which is not a scan response
          */
-        need_event = ((offset < datalen) || (aux_data && !(aux_data->flags_ll & BLE_LL_AUX_FLAG_SCAN_COMPLETE))) && !is_scannable_aux;
+        need_event = ((offset < datalen) || (aux_data && !(aux_data->flags_ll & BLE_LL_AUX_FLAG_SCAN_COMPLETE))) &&
+                     !((offset == datalen) && (aux_data->flags_ll & BLE_LL_AUX_FLAG_SCAN_ERROR)) &&
+                     !is_scannable_aux;
 
         if (need_event) {
             /*

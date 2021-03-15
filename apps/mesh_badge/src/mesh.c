@@ -27,22 +27,11 @@
 static struct ble_npl_callout hello_work;
 static struct ble_npl_callout mesh_start_work;
 
-static void heartbeat(u8_t hops, u16_t feat)
+static void heartbeat(const struct bt_mesh_hb_sub *sub, uint8_t hops,
+		      uint16_t feat)
 {
 	board_show_text("Heartbeat Received", false, K_SECONDS(2));
 }
-
-static struct bt_mesh_cfg_srv cfg_srv = {
-	.relay = BT_MESH_RELAY_ENABLED,
-	.beacon = BT_MESH_BEACON_ENABLED,
-	.default_ttl = DEFAULT_TTL,
-
-	/* 3 transmissions with 20ms interval */
-	.net_transmit = BT_MESH_TRANSMIT(2, 20),
-	.relay_retransmit = BT_MESH_TRANSMIT(3, 20),
-
-	.hb_sub.func = heartbeat,
-};
 
 static struct bt_mesh_cfg_cli cfg_cli = {
 };
@@ -70,7 +59,7 @@ static struct os_mbuf *bt_mesh_pub_msg_health_pub;
 static struct bt_mesh_model_pub health_pub;
 
 static struct bt_mesh_model root_models[] = {
-	BT_MESH_MODEL_CFG_SRV(&cfg_srv),
+	BT_MESH_MODEL_CFG_SRV,
 	BT_MESH_MODEL_CFG_CLI(&cfg_cli),
 	BT_MESH_MODEL_HEALTH_SRV(&health_srv, &health_pub),
 };
@@ -106,7 +95,7 @@ static void vnd_heartbeat(struct bt_mesh_model *model,
 			  struct bt_mesh_msg_ctx *ctx,
 			  struct os_mbuf *buf)
 {
-	u8_t init_ttl, hops;
+	uint8_t init_ttl, hops;
 
 	/* Ignore messages from self */
 	if (ctx->addr == bt_mesh_model_elem(model)->addr) {
@@ -204,23 +193,23 @@ void mesh_send_hello(void)
 
 static int provision_and_configure(void)
 {
-	static const u8_t net_key[16] = {
+	static const uint8_t net_key[16] = {
 		0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc,
 		0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc,
 	};
-	static const u8_t app_key[16] = {
+	static const uint8_t app_key[16] = {
 		0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
 		0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
 	};
-	static const u16_t iv_index;
+	static const uint16_t iv_index;
 	struct bt_mesh_cfg_mod_pub pub = {
 		.addr = GROUP_ADDR,
 		.app_idx = APP_IDX,
 		.ttl = DEFAULT_TTL,
 		.period = BT_MESH_PUB_PERIOD_SEC(10),
 	};
-	u8_t dev_key[16];
-	u16_t addr;
+	uint8_t dev_key[16];
+	uint16_t addr;
 	int err;
 
 	err = bt_rand(dev_key, sizeof(dev_key));
@@ -296,17 +285,19 @@ bool mesh_is_initialized(void)
 	return bt_mesh_is_provisioned();
 }
 
-u16_t mesh_get_addr(void)
+uint16_t mesh_get_addr(void)
 {
 	return elements[0].addr;
 }
 
-int mesh_init(u8_t addr_type)
+int mesh_init(uint8_t addr_type)
 {
-	static const u8_t dev_uuid[16] = { 0xc0, 0xff, 0xee };
+	static const uint8_t dev_uuid[16] = { 0xc0, 0xff, 0xee };
 	static const struct bt_mesh_prov prov = {
 		.uuid = dev_uuid,
 	};
+
+	hb_cb = { .recv = heartbeat };
 
 	bt_mesh_pub_msg_health_pub = NET_BUF_SIMPLE(0);
 	health_pub.msg = bt_mesh_pub_msg_health_pub;
